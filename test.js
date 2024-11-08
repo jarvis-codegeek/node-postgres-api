@@ -1,43 +1,47 @@
-const { default: axios } = require('axios')
-
+const Excel = require('exceljs');
 const fs = require('fs');
+const stream = require('stream');
 
-let startIndex = 0
-let resultsPerPage = 8000
-let total_count = 1
-let data = []
-let nvd_api_key = ''
-const headers = {
-  'Authorization': `Bearer ${nvd_api_key}`,
-  'Content-Type': 'application/json'
-}
+const workbook = new Excel.Workbook();
+const worksheet = workbook.addWorksheet('Sheet1');
+worksheet.columns = [
+    { header: 'Id', key: 'id' },
+    { header: 'Name', key: 'name' },
+    { header: 'Age', key: 'age' },
+];
 
-const nvdApiCall = () => {
+// Create a readable stream from a large array of objects
+const data = [
+    { id: 1, name: 'Alice', age: 30 },
+    { id: 2, name: 'Bob', age: 25 },
+    // Add more objects as needed
+];
 
-  console.log('start-------')
-  setTimeout(async () => {
-    console.log('api call starts')
-    let response = await axios.get(`https://services.nvd.nist.gov/rest/json/cpes/2.0/?resultsPerPage=${resultsPerPage}&startIndex=${startIndex}`, { headers })
-    console.log('calculation started')
-    total_count = response?.data?.totalResults
-    response?.data?.products.forEach((product) => {
-      let obj = {}
-      obj['cpeName'] = product['cpe'].cpeName
-      let { title } = product['cpe'].titles?.find((item) => item.lang === 'en')
-      obj['product_title'] = title
-      data.push(obj)
+const readableStream = new stream.Readable({
+    objectMode: true,
+    read() {}
+});
+
+readableStream.push(data);
+readableStream.push(null);
+
+// Create a writable stream to write data to Excel
+const writableStream = worksheet.createStream({ pageBreak: true });
+writableStream.on('error', (err) => {
+    console.error('Error writing to Excel:', err);
+});
+writableStream.on('end', () => {
+    console.log('Data written to Excel successfully.');
+});
+
+// Pipe the readable stream to the writable stream
+readableStream.pipe(writableStream);
+
+// Save the workbook to a file
+workbook.xlsx.writeFile('example.xlsx')
+    .then(() => {
+        console.log('Workbook saved successfully.');
     })
-    startIndex = startIndex + resultsPerPage
-    console.log('calculation ended')
-    
-    if (startIndex < total_count) {
-      nvdApiCall()
-      console.log('function call done', startIndex + "  " + total_count)
-    }else{
-      fs.writeFile('./data/data.json', JSON.stringify(data), () => console.log('success writing to file'))
-    }
-  }, 10000)
-
-}
-
-nvdApiCall()
+    .catch((err) => {
+        console.error('Error saving workbook:', err);
+    });
